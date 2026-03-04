@@ -1,0 +1,15 @@
+name: Python Assignment Check
+
+on: [push]
+
+jobs:
+  check-logic:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout student code
+        uses: actions/checkout@v4
+
+      - name: Run Docker Judge
+        run: |
+          docker run --rm -v ${{ github.workspace }}:/student knoker123/my-judge:v1
