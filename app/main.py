@@ -43,7 +43,7 @@ def get_item(item_id: int):
 @app.put("/items/{item_id}")
 def update_item(item_id: int, item: ItemUpdate):
     if item_id not in db:
-        raise HTTPException(status_code=404, detail="Item not found")
+        raise HTTPException(status_code=404, detail="Item not found ")
     if item.name is not None:
         db[item_id]["name"] = item.name
     if item.description is not None:
