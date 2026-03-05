@@ -46,7 +46,7 @@ def create_item(item: ItemCreate, db: Session = Depends(get_db)):
 @app.get("/items")
 def get_all_items(db: Session = Depends(get_db)):
     items = db.query(models.Item).all()
-    return [{"id": i.id, "name": i.name, "description": i.description} for i in items]
+    return [{"id": i.id, "name": i.name, "description ": i.description} for i in items]
 
 
 @app.get("/items/{item_id}")
