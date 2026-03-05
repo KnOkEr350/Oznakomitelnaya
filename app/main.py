@@ -1,12 +1,25 @@
+import time
 import uvicorn
 from fastapi import FastAPI, HTTPException, Depends
 from pydantic import BaseModel
 from typing import Optional
 from sqlalchemy.orm import Session
+from sqlalchemy import text
 from .database import engine, SessionLocal
 from . import models
 
-models.Base.metadata.create_all(bind=engine)
+# Retry подключения к БД
+for i in range(10):
+    try:
+        with engine.connect() as conn:
+            conn.execute(text("SELECT 1"))
+        models.Base.metadata.create_all(bind=engine)
+        break
+    except Exception as e:
+        print(f"DB not ready, retry {i+1}/10: {e}")
+        time.sleep(2)
+else:
+    raise RuntimeError("Could not connect to database after 10 retries")
 
 app = FastAPI()
 
@@ -40,13 +53,13 @@ def create_item(item: ItemCreate, db: Session = Depends(get_db)):
     db.add(db_item)
     db.commit()
     db.refresh(db_item)
-    return {"id": db_item.id, "name ": db_item.name, "description ": db_item.description}
+    return {"id": db_item.id, "name": db_item.name, "description": db_item.description}
 
 
 @app.get("/items")
 def get_all_items(db: Session = Depends(get_db)):
     items = db.query(models.Item).all()
-    return [{"id": i.id, "name ": i.name, "description": i.description} for i in items]
+    return [{"id": i.id, "name": i.name, "description": i.description} for i in items]
 
 
 @app.get("/items/{item_id}")
@@ -68,14 +81,14 @@ def update_item(item_id: int, item: ItemUpdate, db: Session = Depends(get_db)):
         db_item.description = item.description
     db.commit()
     db.refresh(db_item)
-    return {"id": db_item.id, "name": db_item.name, "description ": db_item.description}
+    return {"id": db_item.id, "name": db_item.name, "description": db_item.description}
 
 
 @app.delete("/items/{item_id}")
 def delete_item(item_id: int, db: Session = Depends(get_db)):
     db_item = db.query(models.Item).filter(models.Item.id == item_id).first()
     if not db_item:
-        raise HTTPException(status_code=404, detail="Item not found ")
+        raise HTTPException(status_code=404, detail="Item not found")
     db.delete(db_item)
     db.commit()
     return {"id": item_id, "name": db_item.name, "description": db_item.description}
