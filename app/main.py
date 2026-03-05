@@ -1,4 +1,5 @@
 import time
+import httpx
 import uvicorn
 from fastapi import FastAPI, HTTPException, Depends
 from pydantic import BaseModel
@@ -8,7 +9,6 @@ from sqlalchemy import text
 from .database import engine, SessionLocal
 from . import models
 
-# Retry подключения к БД
 for i in range(10):
     try:
         with engine.connect() as conn:
@@ -40,6 +40,7 @@ class ItemCreate(BaseModel):
 class ItemUpdate(BaseModel):
     name: Optional[str] = None
     description: Optional[str] = None
+
 
 
 @app.get("/ping")
@@ -92,6 +93,53 @@ def delete_item(item_id: int, db: Session = Depends(get_db)):
     db.delete(db_item)
     db.commit()
     return {"id": item_id, "name": db_item.name, "description": db_item.description}
+
+
+
+@app.get("/weather")
+def get_weather(city: str, db: Session = Depends(get_db)):
+    with httpx.Client() as client:
+        geo_response = client.get(
+            "https://geocoding-api.open-meteo.com/v1/search",
+            params={"name": city, "count": 1}
+        )
+
+    if geo_response.status_code != 200:
+        raise HTTPException(status_code=502, detail="Geocoding API error")
+
+    geo_data = geo_response.json()
+
+    if not geo_data.get("results"):
+        raise HTTPException(status_code=404, detail=f"City '{city}' not found")
+
+    lat = geo_data["results"][0]["latitude"]
+    lon = geo_data["results"][0]["longitude"]
+    city_name = geo_data["results"][0]["name"]
+
+    # 2. Получаем погоду
+    with httpx.Client() as client:
+        weather_response = client.get(
+            "https://api.open-meteo.com/v1/forecast",
+            params={
+                "latitude": lat,
+                "longitude": lon,
+                "current": "temperature_2m"
+            }
+        )
+
+    if weather_response.status_code != 200:
+        raise HTTPException(status_code=502, detail="Weather API error")
+
+    temperature = weather_response.json()["current"]["temperature_2m"]
+
+    db_weather = db.query(models.Weather).filter(models.Weather.city == city_name).first()
+    if db_weather:
+        db_weather.temperature = temperature
+    else:
+        db_weather = models.Weather(city=city_name, temperature=temperature)
+        db.add(db_weather)
+    db.commit()
+    return {"city": city_name, "temperature": temperature}
 
 
 if __name__ == "__main__":
