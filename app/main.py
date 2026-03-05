@@ -68,7 +68,7 @@ def update_item(item_id: int, item: ItemUpdate, db: Session = Depends(get_db)):
         db_item.description = item.description
     db.commit()
     db.refresh(db_item)
-    return {"id": db_item.id, "name": db_item.name, "description": db_item.description}
+    return {"id": db_item.id, "name": db_item.name, "description ": db_item.description}
 
 
 @app.delete("/items/{item_id}")
