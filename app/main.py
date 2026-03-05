@@ -19,7 +19,7 @@ for i in range(10):
         print(f"DB not ready, retry {i+1}/10: {e}")
         time.sleep(2)
 else:
-    raise RuntimeError("Could not connect to database after 10 retries")
+    raise RuntimeError("Could not connect to database after 10 retries ")
 
 app = FastAPI()
 
