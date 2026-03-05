@@ -1,15 +1,22 @@
-name: Python Assignment Check
+name: Judge
 
-on: [push]
+on:
+  push:
+    branches: [main]
 
 jobs:
-  check-logic:
+  judge:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
 
     steps:
-      - name: Checkout student code
+      - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Run Docker Judge
-        run: |
-          docker run --rm -v ${{ github.workspace }}:/student knoker123/my-judge:v1
+      - name: Build student image
+        run: docker build -t student-app:latest .
+
+      - name: Run judge
+        uses: KnOkEr350/judge-action@v1
+        with:
+          image: student-app:latest
