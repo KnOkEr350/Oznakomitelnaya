@@ -1,5 +1,4 @@
 name: Judge
-description: '123'
 
 on:
   push:
