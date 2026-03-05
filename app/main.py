@@ -40,7 +40,7 @@ def create_item(item: ItemCreate, db: Session = Depends(get_db)):
     db.add(db_item)
     db.commit()
     db.refresh(db_item)
-    return {"id": db_item.id, "name": db_item.name, "description ": db_item.description}
+    return {"id": db_item.id, "name ": db_item.name, "description ": db_item.description}
 
 
 @app.get("/items")
