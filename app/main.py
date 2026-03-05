@@ -75,7 +75,7 @@ def update_item(item_id: int, item: ItemUpdate, db: Session = Depends(get_db)):
 def delete_item(item_id: int, db: Session = Depends(get_db)):
     db_item = db.query(models.Item).filter(models.Item.id == item_id).first()
     if not db_item:
-        raise HTTPException(status_code=404, detail="Item not found")
+        raise HTTPException(status_code=404, detail="Item not found ")
     db.delete(db_item)
     db.commit()
     return {"id": item_id, "name": db_item.name, "description": db_item.description}
