@@ -29,6 +29,7 @@ else:
 app = FastAPI()
 
 # Retry подключения к Redis
+redis_client = None
 for i in range(10):
     try:
         redis_client = redis.Redis(
@@ -41,9 +42,8 @@ for i in range(10):
         break
     except Exception as e:
         print(f"Redis not ready, retry {i+1}/10: {e}")
+        redis_client = None
         time.sleep(2)
-else:
-    raise RuntimeError("Could not connect to Redis after 10 retries")
 
 
 def get_db():
@@ -130,7 +130,7 @@ def get_weather(city: str, db: Session = Depends(get_db)):
     cache_key = f"weather:{city.lower()}"
 
     # 1. Смотрим в Redis
-    cached = redis_client.get(cache_key)
+    cached = redis_client.get(cache_key) if redis_client else None
     if cached:
         return json.loads(cached)
 
@@ -179,8 +179,9 @@ def get_weather(city: str, db: Session = Depends(get_db)):
     db.commit()
 
     # 5. Кладём в Redis с TTL 10 минут
-    result = {"city": city_name, "temperature ": temperature}
-    redis_client.setex(cache_key, CACHE_TTL, json.dumps(result))
+    result = {"city": city_name, "temperature": temperature}
+    if redis_client:
+        redis_client.setex(cache_key, CACHE_TTL, json.dumps(result))
 
     return result
 
