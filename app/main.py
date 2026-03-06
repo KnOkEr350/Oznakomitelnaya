@@ -1,5 +1,7 @@
 import time
 import httpx
+import redis
+import json
 import uvicorn
 from fastapi import FastAPI, HTTPException, Depends
 from pydantic import BaseModel
@@ -8,6 +10,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import text
 from .database import engine, SessionLocal
 from . import models
+
 
 for i in range(10):
     try:
@@ -19,9 +22,15 @@ for i in range(10):
         print(f"DB not ready, retry {i+1}/10: {e}")
         time.sleep(2)
 else:
-    raise RuntimeError("Could not connect to database after 10 retries ")
+    raise RuntimeError("Could not connect to database after 10 retries")
 
 app = FastAPI()
+
+redis_client = redis.Redis(
+    host="redis",
+    port=6379,
+    decode_responses=True
+)
 
 
 def get_db():
@@ -30,6 +39,7 @@ def get_db():
         yield db
     finally:
         db.close()
+
 
 
 class ItemCreate(BaseModel):
@@ -94,10 +104,16 @@ def delete_item(item_id: int, db: Session = Depends(get_db)):
     db.commit()
     return {"id": item_id, "name": db_item.name, "description": db_item.description}
 
-
+CACHE_TTL = 600
 
 @app.get("/weather")
 def get_weather(city: str, db: Session = Depends(get_db)):
+    cache_key = f"weather:{city.lower()}"
+
+    cached = redis_client.get(cache_key)
+    if cached:
+        return json.loads(cached)
+
     with httpx.Client() as client:
         geo_response = client.get(
             "https://geocoding-api.open-meteo.com/v1/search",
@@ -116,7 +132,6 @@ def get_weather(city: str, db: Session = Depends(get_db)):
     lon = geo_data["results"][0]["longitude"]
     city_name = geo_data["results"][0]["name"]
 
-    # 2. Получаем погоду
     with httpx.Client() as client:
         weather_response = client.get(
             "https://api.open-meteo.com/v1/forecast",
@@ -139,7 +154,12 @@ def get_weather(city: str, db: Session = Depends(get_db)):
         db_weather = models.Weather(city=city_name, temperature=temperature)
         db.add(db_weather)
     db.commit()
-    return {"city": city_name, "temperature": temperature}
+
+
+    result = {"city": city_name, "temperature": temperature}
+    redis_client.setex(cache_key, CACHE_TTL, json.dumps(result))
+
+    return result
 
 
 if __name__ == "__main__":
