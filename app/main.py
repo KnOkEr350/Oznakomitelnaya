@@ -179,7 +179,7 @@ def get_weather(city: str, db: Session = Depends(get_db)):
     db.commit()
 
     # 5. Кладём в Redis с TTL 10 минут
-    result = {"city": city_name, "temperature": temperature}
+    result = {"city": city_name, "temperature ": temperature}
     redis_client.setex(cache_key, CACHE_TTL, json.dumps(result))
 
     return result
