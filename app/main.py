@@ -24,7 +24,7 @@ for i in range(10):
         print(f"DB not ready, retry {i+1}/10: {e}")
         time.sleep(2)
 else:
-    raise RuntimeError("Could not connect to database after 10 retries ")
+    raise RuntimeError("Could not connect to database after 10 retries")
 
 app = FastAPI()
 
@@ -179,7 +179,7 @@ def get_weather(city: str, db: Session = Depends(get_db)):
     db.commit()
 
     # 5. Кладём в Redis с TTL 10 минут
-    result = {"city": city_name, "temperature ": temperature}
+    result = {"city": city_name, "temperature": temperature}
     if redis_client:
         redis_client.setex(cache_key, CACHE_TTL, json.dumps(result))
 
