@@ -1,3 +1,4 @@
+import os
 import time
 import httpx
 import redis
@@ -12,6 +13,7 @@ from .database import engine, SessionLocal
 from . import models
 
 
+# Retry подключения к БД
 for i in range(10):
     try:
         with engine.connect() as conn:
@@ -26,11 +28,22 @@ else:
 
 app = FastAPI()
 
-redis_client = redis.Redis(
-    host="redis",
-    port=6379,
-    decode_responses=True
-)
+# Retry подключения к Redis
+for i in range(10):
+    try:
+        redis_client = redis.Redis(
+            host=os.getenv("REDIS_HOST", "redis"),
+            port=int(os.getenv("REDIS_PORT", 6379)),
+            decode_responses=True
+        )
+        redis_client.ping()
+        print("Redis connected!")
+        break
+    except Exception as e:
+        print(f"Redis not ready, retry {i+1}/10: {e}")
+        time.sleep(2)
+else:
+    raise RuntimeError("Could not connect to Redis after 10 retries")
 
 
 def get_db():
@@ -41,6 +54,7 @@ def get_db():
         db.close()
 
 
+# ───── Schemas ─────
 
 class ItemCreate(BaseModel):
     name: str
@@ -52,6 +66,7 @@ class ItemUpdate(BaseModel):
     description: Optional[str] = None
 
 
+# ───── CRUD эндпоинты ─────
 
 @app.get("/ping")
 def ping():
@@ -104,17 +119,23 @@ def delete_item(item_id: int, db: Session = Depends(get_db)):
     db.commit()
     return {"id": item_id, "name": db_item.name, "description": db_item.description}
 
-CACHE_TTL = 600
+
+# ───── Weather эндпоинт ─────
+
+CACHE_TTL = 600  # 10 минут
+
 
 @app.get("/weather")
 def get_weather(city: str, db: Session = Depends(get_db)):
     cache_key = f"weather:{city.lower()}"
 
+    # 1. Смотрим в Redis
     cached = redis_client.get(cache_key)
     if cached:
         return json.loads(cached)
 
-    with httpx.Client() as client:
+    # 2. Геокодинг — получаем координаты
+    with httpx.Client(timeout=20) as client:
         geo_response = client.get(
             "https://geocoding-api.open-meteo.com/v1/search",
             params={"name": city, "count": 1}
@@ -132,7 +153,8 @@ def get_weather(city: str, db: Session = Depends(get_db)):
     lon = geo_data["results"][0]["longitude"]
     city_name = geo_data["results"][0]["name"]
 
-    with httpx.Client() as client:
+    # 3. Получаем погоду
+    with httpx.Client(timeout=20) as client:
         weather_response = client.get(
             "https://api.open-meteo.com/v1/forecast",
             params={
@@ -147,6 +169,7 @@ def get_weather(city: str, db: Session = Depends(get_db)):
 
     temperature = weather_response.json()["current"]["temperature_2m"]
 
+    # 4. Сохраняем в БД
     db_weather = db.query(models.Weather).filter(models.Weather.city == city_name).first()
     if db_weather:
         db_weather.temperature = temperature
@@ -155,7 +178,7 @@ def get_weather(city: str, db: Session = Depends(get_db)):
         db.add(db_weather)
     db.commit()
 
-
+    # 5. Кладём в Redis с TTL 10 минут
     result = {"city": city_name, "temperature": temperature}
     redis_client.setex(cache_key, CACHE_TTL, json.dumps(result))
 
