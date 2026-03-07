@@ -54,7 +54,6 @@ def get_db():
         db.close()
 
 
-# ───── Schemas ─────
 
 class ItemCreate(BaseModel):
     name: str
@@ -66,7 +65,6 @@ class ItemUpdate(BaseModel):
     description: Optional[str] = None
 
 
-# ───── CRUD эндпоинты ─────
 
 @app.get("/ping")
 def ping():
@@ -120,7 +118,6 @@ def delete_item(item_id: int, db: Session = Depends(get_db)):
     return {"id": item_id, "name": db_item.name, "description": db_item.description}
 
 
-# ───── Weather эндпоинт ─────
 
 CACHE_TTL = 600  # 10 минут
 
@@ -129,12 +126,10 @@ CACHE_TTL = 600  # 10 минут
 def get_weather(city: str, db: Session = Depends(get_db)):
     cache_key = f"weather:{city.lower()}"
 
-    # 1. Смотрим в Redis
     cached = redis_client.get(cache_key) if redis_client else None
     if cached:
         return json.loads(cached)
 
-    # 2. Геокодинг — получаем координаты
     with httpx.Client(timeout=20) as client:
         geo_response = client.get(
             "https://geocoding-api.open-meteo.com/v1/search",
@@ -153,7 +148,6 @@ def get_weather(city: str, db: Session = Depends(get_db)):
     lon = geo_data["results"][0]["longitude"]
     city_name = geo_data["results"][0]["name"]
 
-    # 3. Получаем погоду
     with httpx.Client(timeout=20) as client:
         weather_response = client.get(
             "https://api.open-meteo.com/v1/forecast",
@@ -169,7 +163,7 @@ def get_weather(city: str, db: Session = Depends(get_db)):
 
     temperature = weather_response.json()["current"]["temperature_2m"]
 
-    # 4. Сохраняем в БД
+
     db_weather = db.query(models.Weather).filter(models.Weather.city == city_name).first()
     if db_weather:
         db_weather.temperature = temperature
@@ -178,7 +172,6 @@ def get_weather(city: str, db: Session = Depends(get_db)):
         db.add(db_weather)
     db.commit()
 
-    # 5. Кладём в Redis с TTL 10 минут
     result = {"city": city_name, "temperature": temperature}
     if redis_client:
         redis_client.setex(cache_key, CACHE_TTL, json.dumps(result))
